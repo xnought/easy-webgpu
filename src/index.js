@@ -8,11 +8,6 @@ function assert(truth, msg = "ASSERT FAILED") {
 	if (!truth) throw new Error(msg);
 }
 
-function mapBufferToGPU(gpuBuffer, cpuBuffer) {
-	new Float32Array(gpuBuffer.getMappedRange()).set(cpuBuffer);
-	gpuBuffer.unmap();
-}
-
 class GPU {
 	constructor(device) {
 		this.device = device;
@@ -40,16 +35,15 @@ class GPU {
 	memcpyHostToDevice(gpuBuffer, cpuBuffer) {
 		this.device.queue.writeBuffer(gpuBuffer, 0, cpuBuffer, 0);
 	}
-	async memCopyDeviceToHost(hostBuffer, deviceBuffer) {
+	async memcpyDeviceToHost(hostBuffer, deviceBuffer) {
 		hostBuffer.set(await this.mapGPUToCPU(deviceBuffer));
 	}
 	free(buffer) {
 		buffer.destroy();
 	}
-	async printGPUBuffer(buffer) {
+	async printGPUBuffer(buffer, label = "") {
 		const d = await this.mapGPUToCPU(buffer);
-		console.log("GPU", buffer);
-		console.log("CPU", d);
+		console.log(label, Array.from(d));
 	}
 	printDeviceInfo() {
 		console.table(this.device.adapterInfo);
@@ -92,7 +86,7 @@ async function testMemAllocAndCopy() {
 	const cGPU = gpu.memAlloc(c.byteLength);
 	gpu.memcpyHostToDevice(cGPU, c);
 
-	await gpu.memCopyDeviceToHost(result, cGPU);
+	await gpu.memcpyDeviceToHost(result, cGPU);
 	let same = true;
 	for (let i = 0; i < c.length; i++) {
 		if (c[i] !== result[i]) {
@@ -113,5 +107,108 @@ export async function test() {
 }
 
 export async function dev() {
-	console.log("here!");
+	const gpu = await GPU.init();
+	gpu.printDeviceInfo();
+
+	const cpuA = new Float32Array([1, 2, 3, 4, 5]);
+	const cpuB = new Float32Array([1, 2, 3, 4, 5]);
+	const cpuC = new Float32Array([0]);
+
+	const gpuA = gpu.memAlloc(cpuA.byteLength);
+	const gpuB = gpu.memAlloc(cpuB.byteLength);
+	const gpuC = gpu.memAlloc(cpuC.byteLength);
+
+	gpu.memcpyHostToDevice(gpuA, cpuA);
+	gpu.memcpyHostToDevice(gpuB, cpuB);
+	gpu.memcpyHostToDevice(gpuC, cpuC);
+
+	gpu.printGPUBuffer(gpuA, "A");
+	gpu.printGPUBuffer(gpuB, "B");
+	gpu.printGPUBuffer(gpuC, "C");
+
+	// dot
+	const THREADS_PER_BLOCK = 5;
+	const mod = gpu.device.createShaderModule({
+		code: `
+      @group(0) @binding(0) var<storage, read> a: array<f32>;
+      @group(0) @binding(1) var<storage, read> b: array<f32>;
+      @group(0) @binding(2) var<storage, read_write> c: f32;
+
+      var<workgroup> partialSums: array<f32, ${THREADS_PER_BLOCK}>;
+
+      @compute @workgroup_size(${THREADS_PER_BLOCK})
+      fn main(@builtin(global_invocation_id) gid : vec3u, @builtin(local_invocation_id) lid : vec3u) {
+        partialSums[lid.x] = a[gid.x]*b[gid.x];
+        workgroupBarrier();
+
+        if(lid.x == 0) {
+          var summed: f32 = 0.0;
+          for(var i: u32 = 0; i < ${THREADS_PER_BLOCK}; i++) {
+            summed += partialSums[i];
+          }
+          c = summed;
+        }
+      }
+    `,
+	});
+	const bindGroupLayout = gpu.device.createBindGroupLayout({
+		entries: [
+			{
+				binding: 0,
+				visibility: GPUShaderStage.COMPUTE,
+				buffer: { type: "read-only-storage" },
+			},
+			{
+				binding: 1,
+				visibility: GPUShaderStage.COMPUTE,
+				buffer: { type: "read-only-storage" },
+			},
+			{
+				binding: 2,
+				visibility: GPUShaderStage.COMPUTE,
+				buffer: { type: "storage" },
+			},
+		],
+	});
+	const bindGroup = gpu.device.createBindGroup({
+		layout: bindGroupLayout,
+		entries: [
+			{ binding: 0, resource: { buffer: gpuA } },
+			{ binding: 1, resource: { buffer: gpuB } },
+			{ binding: 2, resource: { buffer: gpuC } },
+		],
+	});
+	const computePipeline = gpu.device.createComputePipeline({
+		layout: gpu.device.createPipelineLayout({
+			bindGroupLayouts: [bindGroupLayout],
+		}),
+		compute: {
+			module: mod,
+			entryPoint: "main",
+		},
+	});
+	console.log(computePipeline);
+
+	const commandEncoder = gpu.device.createCommandEncoder();
+	const passEncoder = commandEncoder.beginComputePass();
+	passEncoder.setPipeline(computePipeline);
+	passEncoder.setBindGroup(0, bindGroup);
+	passEncoder.dispatchWorkgroups(1);
+	passEncoder.end();
+	gpu.device.queue.submit([commandEncoder.finish()]);
+
+	// copy back the result and compare
+	await gpu.memcpyDeviceToHost(cpuC, gpuC);
+	console.log(
+		"Result gpu",
+		cpuC[0],
+		"vs actual dot",
+		cpuA.reduce((acc, _, i) => {
+			return acc + cpuA[i] * cpuB[i];
+		}, 0)
+	);
+
+	gpu.free(gpuA);
+	gpu.free(gpuB);
+	gpu.free(gpuC);
 }
