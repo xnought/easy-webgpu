@@ -24,7 +24,7 @@ class GPU {
 		assert(device, "device exists");
 		return new GPU(device);
 	}
-	mem_alloc(
+	memAlloc(
 		bytes,
 		usage = GPUBufferUsage.STORAGE |
 			GPUBufferUsage.COPY_DST |
@@ -37,10 +37,10 @@ class GPU {
 		});
 		return buffer;
 	}
-	memcpy_htod(gpuBuffer, cpuBuffer) {
+	memcpyHostToDevice(gpuBuffer, cpuBuffer) {
 		this.device.queue.writeBuffer(gpuBuffer, 0, cpuBuffer, 0);
 	}
-	async memcpy_dtoh(hostBuffer, deviceBuffer) {
+	async memCopyDeviceToHost(hostBuffer, deviceBuffer) {
 		hostBuffer.set(await this.mapGPUToCPU(deviceBuffer));
 	}
 	free(buffer) {
@@ -57,7 +57,7 @@ class GPU {
 
 	// this function may or may not leak. idk
 	async mapGPUToCPU(gpuSrcBuffer) {
-		const tempDstBuffer = this.mem_alloc(
+		const tempDstBuffer = this.memAlloc(
 			gpuSrcBuffer.size,
 			GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ
 		);
@@ -74,8 +74,6 @@ class GPU {
 		const result = new Float32Array(tempDstBuffer.getMappedRange());
 		return result;
 	}
-
-	async execCopyCommand(dst, src) {}
 }
 
 class SourceModule {
@@ -86,15 +84,15 @@ class SourceModule {
 	get_function() {}
 }
 
-async function test_mem_alloc_cpy() {
+async function testMemAllocAndCopy() {
 	const gpu = await GPU.init();
 	const c = new Float32Array([1.0, 2.0, 3.0]);
 	const result = new Float32Array(c.length);
 
-	const cGPU = gpu.mem_alloc(c.byteLength);
-	gpu.memcpy_htod(cGPU, c);
+	const cGPU = gpu.memAlloc(c.byteLength);
+	gpu.memcpyHostToDevice(cGPU, c);
 
-	await gpu.memcpy_dtoh(result, cGPU);
+	await gpu.memCopyDeviceToHost(result, cGPU);
 	let same = true;
 	for (let i = 0; i < c.length; i++) {
 		if (c[i] !== result[i]) {
@@ -104,14 +102,14 @@ async function test_mem_alloc_cpy() {
 	}
 	assert(
 		same,
-		"[mem_alloc and memcpy] Data not copied to or from GPU correctly."
+		"[testMemAllocAndCopy] Data not copied to or from GPU correctly."
 	);
 
 	gpu.free(cGPU);
 }
 
 export async function test() {
-	await test_mem_alloc_cpy();
+	await testMemAllocAndCopy();
 }
 
 export async function dev() {
