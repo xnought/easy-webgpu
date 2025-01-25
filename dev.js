@@ -1,2 +1,2 @@
 import { dev } from "./src";
-dev();
+dev().then((d) => {});
