@@ -1,8 +1,18 @@
+/**
+ * EZWEBGPU Library
+ * AIM TO MIMIC PyCUDA https://homepages.math.uic.edu/~jan/mcs572f16/mcs572notes/lec29.html
+ * Tooks tons of code from https://developer.chrome.com/docs/capabilities/web-apis/gpu-compute
+ */
+
 function assert(truth, msg = "ASSERT FAILED") {
 	if (!truth) throw new Error(msg);
 }
 
-// AIM TO MIMIC PyCUDA https://homepages.math.uic.edu/~jan/mcs572f16/mcs572notes/lec29.html
+function mapBufferToGPU(gpuBuffer, cpuBuffer) {
+	new Float32Array(gpuBuffer.getMappedRange()).set(cpuBuffer);
+	gpuBuffer.unmap();
+}
+
 class GPU {
 	constructor(device) {
 		this.device = device;
@@ -14,19 +24,58 @@ class GPU {
 		assert(device, "device exists");
 		return new GPU(device);
 	}
-	mem_alloc(bytes) {
+	mem_alloc(
+		bytes,
+		usage = GPUBufferUsage.STORAGE |
+			GPUBufferUsage.COPY_DST |
+			GPUBufferUsage.COPY_SRC
+	) {
 		assert(bytes > 0);
 		const buffer = this.device.createBuffer({
 			size: bytes,
-			usage: GPUBufferUsage.STORAGE,
+			usage,
 		});
 		return buffer;
 	}
-	memcpy_dtoh() {}
-	memcpy_htod() {}
+	memcpy_htod(gpuBuffer, cpuBuffer) {
+		this.device.queue.writeBuffer(gpuBuffer, 0, cpuBuffer, 0);
+	}
+	async memcpy_dtoh(hostBuffer, deviceBuffer) {
+		hostBuffer.set(await this.mapGPUToCPU(deviceBuffer));
+	}
 	free(buffer) {
 		buffer.destroy();
 	}
+	async printGPUBuffer(buffer) {
+		const d = await this.mapGPUToCPU(buffer);
+		console.log("GPU", buffer);
+		console.log("CPU", d);
+	}
+	printDeviceInfo() {
+		console.table(this.device.adapterInfo);
+	}
+
+	// this function may or may not leak. idk
+	async mapGPUToCPU(gpuSrcBuffer) {
+		const tempDstBuffer = this.mem_alloc(
+			gpuSrcBuffer.size,
+			GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ
+		);
+		const copyEncoder = this.device.createCommandEncoder();
+		copyEncoder.copyBufferToBuffer(
+			gpuSrcBuffer,
+			0,
+			tempDstBuffer,
+			0,
+			gpuSrcBuffer.size
+		);
+		this.device.queue.submit([copyEncoder.finish()]);
+		await tempDstBuffer.mapAsync(GPUMapMode.READ);
+		const result = new Float32Array(tempDstBuffer.getMappedRange());
+		return result;
+	}
+
+	async execCopyCommand(dst, src) {}
 }
 
 class SourceModule {
@@ -37,26 +86,34 @@ class SourceModule {
 	get_function() {}
 }
 
-export async function dev() {
-	const a = new Float32Array([1, 2, 3]);
-	const b = new Float32Array([3, 2, 1]);
-	const c = new Float32Array([0]);
-
+async function test_mem_alloc_cpy() {
 	const gpu = await GPU.init();
-	const aGPU = gpu.mem_alloc(a.byteLength);
-	gpu.free(aGPU);
-	// const bGPU = gpu.mem_alloc(b.byteLength);
-	// const cGPU = gpu.mem_alloc(c.byteLength);
+	const c = new Float32Array([1.0, 2.0, 3.0]);
+	const result = new Float32Array(c.length);
 
-	// gpu.memcpy_htod(aGPU, a);
-	// gpu.memcpy_htod(bGPU, b);
-	// gpu.memcpy_htod(cGPU, c);
+	const cGPU = gpu.mem_alloc(c.byteLength);
+	gpu.memcpy_htod(cGPU, c);
 
-	// // Then perform computation
-	// const mod = new SourceModule(gpu, `some kernel function here`);
-	// const func = mod.get_function("dot");
-	// func(aGPU, bGPU, cGPU);
+	await gpu.memcpy_dtoh(result, cGPU);
+	let same = true;
+	for (let i = 0; i < c.length; i++) {
+		if (c[i] !== result[i]) {
+			same = false;
+			break;
+		}
+	}
+	assert(
+		same,
+		"[mem_alloc and memcpy] Data not copied to or from GPU correctly."
+	);
 
-	// grab the result from cGPU and put into c
-	// gpu.memcpy_dtoh(c, cGPU);
+	gpu.free(cGPU);
+}
+
+export async function test() {
+	await test_mem_alloc_cpy();
+}
+
+export async function dev() {
+	console.log("here!");
 }
