@@ -11,9 +11,10 @@ export class Tensor {
 		gpu.memcpyHostToDevice(this.data, typedArrayData);
 		this.dtype = typedArrayData.constructor;
 	}
-	print() {
-		console.log(`Tensor(dtype=${this.dtype.name})`);
-		this.gpu.printGPUBuffer(this.data, "this.data", this.dtype);
+	async print() {
+		console.log(`Tensor(this.dtype=${this.dtype.name}, `);
+		await this.gpu.printGPUBuffer(this.data, "this.data=", this.dtype);
+		console.log(")");
 	}
 	free() {
 		this.gpu.free(this.data);
@@ -24,6 +25,6 @@ export class Tensor {
 export async function dev() {
 	const gpu = await GPU.init();
 	const a = new Tensor(gpu, new Float32Array([1, 2, 3]));
-	a.print();
+	await a.print();
 	a.free();
 }
