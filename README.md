@@ -1,18 +1,18 @@
-# Easy WebGPU 
+# WebGPU Tensor
 
-Easily transfer data from CPU to GPU, execute WebGPU code, and transfer back from GPU to CPU. Our API is way simpler than regular WebGPU compute pipelines!
-
-The API _roughly_ follows high-level functions from [PyCuda](https://homepages.math.uic.edu/~jan/mcs572f16/mcs572notes/lec29.html#pycuda). See the [Usage](#usage) section below!
+1. A Tensor (ndarray) API with common operations
+2. A low-level PyCuda like API to easily transfer data from CPU to GPU, execute WebGPU code, and transfer back from GPU to CPU.
 
 **Roadmap**
 
 - [x] Copy the basic API structure of PyCuda
 - [ ] Have kernel running with multiple workgroups
 - [x] Memcpy and MemAlloc for other data types (uint and so on).
-- [ ] Multiple kernels executing one after another 
-- [ ] Example of Matrix multiply followed by ReLU
-- [ ] Benchmarks
-
+- [ ] Tensor constructor (shape, strides, ...)
+- [ ] Tensor Reshape Ops (transpose, reshape, expand, ...)
+- [ ] Tensor Binary Ops (add, sub, mult, div, ...)
+- [ ] Tensor Unary Ops (ReLU, Sigmoid, ...)
+- [ ] Example of ML model implemented with Tensor
 
 ## Usage
 
