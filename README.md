@@ -1,6 +1,8 @@
-# ezwebgpu
+# EasyWebGPU 
 
-WebGPU API to move data from CPU to GPU and execute kernels more easily for compute applications.
+Easily transfer data from CPU to GPU, execute WebGPU code, and transfer back from GPU to CPU. Our API is way simpler than regular WebGPU compute pipelines!
+
+The API _roughly_ follows high-level functions from [PyCuda](https://homepages.math.uic.edu/~jan/mcs572f16/mcs572notes/lec29.html).
 
 **Roadmap**
 
@@ -10,6 +12,12 @@ WebGPU API to move data from CPU to GPU and execute kernels more easily for comp
 - [ ] Multiple kernels executing one after another 
 - [ ] Example of Matrix multiply followed by ReLU
 - [ ] Benchmarks
+
+
+## Usage
+
+TODO!
+
 
 ## Dev
 
