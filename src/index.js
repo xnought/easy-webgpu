@@ -142,14 +142,16 @@ function parseEntries(buffers) {
 
 export async function test() {
 	await testMemAllocAndCopy();
+	await testSingleWorkgroup();
+	console.log("ALL TESTS PASSED");
 }
 
-export async function dev() {
+async function testSingleWorkgroup() {
 	const gpu = await GPU.init();
-	gpu.printDeviceInfo();
 
-	const cpuA = new Float32Array([1, 2, 3, 4, 5]);
-	const cpuB = new Float32Array([1, 2, 3, 4, 5]);
+	const length = 256;
+	const cpuA = new Float32Array(length).fill(0).map((_) => Math.random());
+	const cpuB = new Float32Array(length).fill(0).map((_) => Math.random());
 	const cpuC = new Float32Array([0]);
 
 	const gpuA = gpu.memAlloc(cpuA.byteLength);
@@ -160,12 +162,7 @@ export async function dev() {
 	gpu.memcpyHostToDevice(gpuB, cpuB);
 	gpu.memcpyHostToDevice(gpuC, cpuC);
 
-	gpu.printGPUBuffer(gpuA, "A");
-	gpu.printGPUBuffer(gpuB, "B");
-	gpu.printGPUBuffer(gpuC, "C");
-
-	// dot
-	const THREADS_PER_BLOCK = 5;
+	const THREADS_PER_BLOCK = 256;
 	const code = `
       @group(0) @binding(0) var<storage, read> a: array<f32>;
       @group(0) @binding(1) var<storage, read> b: array<f32>;
@@ -175,15 +172,17 @@ export async function dev() {
 
       @compute @workgroup_size(${THREADS_PER_BLOCK})
       fn main(@builtin(global_invocation_id) gid : vec3u, @builtin(local_invocation_id) lid : vec3u) {
-        partialSums[lid.x] = a[gid.x]*b[gid.x];
-        workgroupBarrier();
+        if(gid.x < ${length}) {
+          partialSums[lid.x] += a[gid.x]*b[gid.x];
+        }
 
+        workgroupBarrier();
         if(lid.x == 0) {
           var summed: f32 = 0.0;
           for(var i: u32 = 0; i < ${THREADS_PER_BLOCK}; i++) {
             summed += partialSums[i];
           }
-          c = summed;
+          c += summed;
         }
       }
     `;
@@ -199,16 +198,19 @@ export async function dev() {
 
 	// copy back the result and compare
 	await gpu.memcpyDeviceToHost(cpuC, gpuC);
-	console.log(
-		"Result gpu",
-		cpuC[0],
-		"vs actual dot",
-		cpuA.reduce((acc, _, i) => {
-			return acc + cpuA[i] * cpuB[i];
-		}, 0)
-	);
+	let actual = cpuA.reduce((acc, _, i) => {
+		return acc + cpuA[i] * cpuB[i];
+	}, 0);
 
+	assert(
+		actual.toFixed(1) === cpuC[0].toFixed(1),
+		"[] Data not copied to or from GPU correctly."
+	);
 	gpu.free(gpuA);
 	gpu.free(gpuB);
 	gpu.free(gpuC);
+}
+
+export async function dev() {
+	await test();
 }
