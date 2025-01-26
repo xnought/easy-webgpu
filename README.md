@@ -8,7 +8,7 @@ The API _roughly_ follows high-level functions from [PyCuda](https://homepages.m
 
 - [x] Copy the basic API structure of PyCuda
 - [ ] Have kernel running with multiple workgroups
-- [ ] Memcpy and MemAlloc for other data types (uint and so on).
+- [x] Memcpy and MemAlloc for other data types (uint and so on).
 - [ ] Multiple kernels executing one after another 
 - [ ] Example of Matrix multiply followed by ReLU
 - [ ] Benchmarks
