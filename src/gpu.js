@@ -47,7 +47,7 @@ export class GPU {
 	}
 	async printGPUBuffer(buffer, label = "", TypedArray = Float32Array) {
 		const d = await this.mapGPUToCPU(buffer, TypedArray);
-		console.log(label, Array.from(d));
+		console.log(label, Array.from(d), d.constructor.name);
 	}
 	printDeviceInfo() {
 		console.table(this.device.adapterInfo);
