@@ -69,51 +69,9 @@ class GPU {
 		return result;
 	}
 
-	/**
-	 * @param {{code: string, buffers: {buffer: GPUBuffer, type: "storage" | "read-only-storage" | undefined}[], dispatchWorkgroups: number[], entryPoint?: string}
-	 */
-	execKernel({ code, buffers, dispatchWorkgroups, entryPoint = "main" }) {
-		const mod = this.device.createShaderModule({ code });
-		const computePipeline = this.device.createComputePipeline({
-			layout: "auto",
-			compute: {
-				module: mod,
-				entryPoint,
-			},
-		});
-		const bindGroupLayout = computePipeline.getBindGroupLayout(0);
-		const bindGroup = this.device.createBindGroup({
-			layout: bindGroupLayout,
-			entries: parseEntries(buffers),
-		});
-		const commandEncoder = this.device.createCommandEncoder();
-		const passEncoder = commandEncoder.beginComputePass();
-		passEncoder.setPipeline(computePipeline);
-		passEncoder.setBindGroup(0, bindGroup);
-		passEncoder.dispatchWorkgroups(...dispatchWorkgroups);
-		passEncoder.end();
-		this.device.queue.submit([commandEncoder.finish()]);
-	}
-
 	SourceModule(kernel) {
 		return new SourceModule(this, kernel);
 	}
-}
-
-function parseLayout(buffers) {
-	return buffers.map((d, i) => {
-		return {
-			binding: i,
-			visibility: GPUShaderStage.COMPUTE,
-			buffer: { type: d.type ?? "read-only-storage" },
-		};
-	});
-}
-
-function parseEntries(buffers) {
-	return buffers.map((d, i) => {
-		return { binding: i, resource: { buffer: d.buffer } };
-	});
 }
 
 class SourceModule {
@@ -200,7 +158,7 @@ async function testSingleWorkgroup() {
 	gpu.memcpyHostToDevice(gpuC, cpuC);
 
 	const THREADS_PER_BLOCK = 256;
-	const code = `
+	const mod = gpu.SourceModule(`
       @group(0) @binding(0) var<storage, read> a: array<f32>;
       @group(0) @binding(1) var<storage, read> b: array<f32>;
       @group(0) @binding(2) var<storage, read_write> c: f32;
@@ -208,7 +166,7 @@ async function testSingleWorkgroup() {
       var<workgroup> partialSums: array<f32, ${THREADS_PER_BLOCK}>;
 
       @compute @workgroup_size(${THREADS_PER_BLOCK})
-      fn main(@builtin(global_invocation_id) gid : vec3u, @builtin(local_invocation_id) lid : vec3u) {
+      fn myDot(@builtin(global_invocation_id) gid : vec3u, @builtin(local_invocation_id) lid : vec3u) {
         if(gid.x < ${length}) {
           partialSums[lid.x] += a[gid.x]*b[gid.x];
         }
@@ -222,15 +180,15 @@ async function testSingleWorkgroup() {
           c += summed;
         }
       }
-    `;
-	gpu.execKernel({
-		code,
-		buffers: [
-			{ buffer: gpuA, type: "read-only-storage" },
-			{ buffer: gpuB, type: "read-only-storage" },
-			{ buffer: gpuC, type: "storage" },
+    `);
+	const dot = mod.getFunction("myDot");
+	dot({
+		inputs: [
+			{ binding: 0, resource: { buffer: gpuA } },
+			{ binding: 1, resource: { buffer: gpuB } },
+			{ binding: 2, resource: { buffer: gpuC } },
 		],
-		dispatchWorkgroups: [1],
+		workgroups: [1],
 	});
 
 	// copy back the result and compare
@@ -317,5 +275,5 @@ async function testSourceModule() {
 }
 
 export async function dev() {
-	await testSourceModule();
+	await test();
 }
