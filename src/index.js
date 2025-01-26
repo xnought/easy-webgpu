@@ -187,7 +187,7 @@ async function testSingleWorkgroup() {
 	gpu.memcpyHostToDevice(gpuC, cpuC);
 
 	const THREADS_PER_BLOCK = 256;
-	const mod = gpu.SourceModule(`
+	const mod = gpu.SourceModule(/*wgsl*/ `
       @group(0) @binding(0) var<storage, read> a: array<f32>;
       @group(0) @binding(1) var<storage, read> b: array<f32>;
       @group(0) @binding(2) var<storage, read_write> c: f32;
@@ -255,16 +255,17 @@ async function testOtherTypes() {
 	gpu.memcpyHostToDevice(gpuN, cpuN);
 
 	const THREADS_PER_BLOCK = 256;
-	const mod = gpu.SourceModule(`
+	const mod = gpu.SourceModule(/*wgsl*/ `
       @group(0) @binding(0) var<storage, read> a: array<u32>;
       @group(0) @binding(1) var<storage, read> b: array<u32>;
       @group(0) @binding(2) var<storage, read_write> c: u32;
       @group(0) @binding(3) var<storage, read> n: u32;
 
-      var<workgroup> partialSums: array<u32, ${THREADS_PER_BLOCK}>;
+	  var<workgroup> partialSums: array<u32, ${THREADS_PER_BLOCK}>;
 
       @compute @workgroup_size(${THREADS_PER_BLOCK})
       fn myDot(@builtin(global_invocation_id) gid : vec3u, @builtin(local_invocation_id) lid : vec3u) {
+
         if(gid.x < n) {
           partialSums[lid.x] = a[gid.x]*b[gid.x];
         }
