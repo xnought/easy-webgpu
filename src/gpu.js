@@ -16,6 +16,11 @@ export class GPU {
 		assert(device, "device exists");
 		return new GPU(device);
 	}
+	/**
+	 * @param {number} bytes
+	 * @param {GPUBufferUsage} usage
+	 * @returns {GPUBuffer}
+	 */
 	memAlloc(
 		bytes,
 		usage = GPUBufferUsage.STORAGE |
