@@ -2,7 +2,7 @@
 
 Easily transfer data from CPU to GPU, execute WebGPU code, and transfer back from GPU to CPU. Our API is way simpler than regular WebGPU compute pipelines!
 
-The API _roughly_ follows high-level functions from [PyCuda](https://homepages.math.uic.edu/~jan/mcs572f16/mcs572notes/lec29.html).
+The API _roughly_ follows high-level functions from [PyCuda](https://homepages.math.uic.edu/~jan/mcs572f16/mcs572notes/lec29.html). See the [#usage](Usage) section below for examples on how to use the API.
 
 **Roadmap**
 
