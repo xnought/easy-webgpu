@@ -1,4 +1,4 @@
-# EasyWebGPU 
+# Easy WebGPU 
 
 Easily transfer data from CPU to GPU, execute WebGPU code, and transfer back from GPU to CPU. Our API is way simpler than regular WebGPU compute pipelines!
 
