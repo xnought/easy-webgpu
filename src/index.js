@@ -36,13 +36,15 @@ class GPU {
 		this.device.queue.writeBuffer(gpuBuffer, 0, cpuBuffer, 0);
 	}
 	async memcpyDeviceToHost(hostBuffer, deviceBuffer) {
-		hostBuffer.set(await this.mapGPUToCPU(deviceBuffer));
+		hostBuffer.set(
+			await this.mapGPUToCPU(deviceBuffer, hostBuffer.constructor)
+		);
 	}
 	free(buffer) {
 		buffer.destroy();
 	}
-	async printGPUBuffer(buffer, label = "") {
-		const d = await this.mapGPUToCPU(buffer);
+	async printGPUBuffer(buffer, label = "", TypedArray = Float32Array) {
+		const d = await this.mapGPUToCPU(buffer, TypedArray);
 		console.log(label, Array.from(d));
 	}
 	printDeviceInfo() {
@@ -50,7 +52,7 @@ class GPU {
 	}
 
 	// this function may or may not leak. idk
-	async mapGPUToCPU(gpuSrcBuffer) {
+	async mapGPUToCPU(gpuSrcBuffer, TypedArray = Float32Array) {
 		const tempDstBuffer = this.memAlloc(
 			gpuSrcBuffer.size,
 			GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ
@@ -65,7 +67,7 @@ class GPU {
 		);
 		this.device.queue.submit([copyEncoder.finish()]);
 		await tempDstBuffer.mapAsync(GPUMapMode.READ);
-		const result = new Float32Array(tempDstBuffer.getMappedRange());
+		const result = new TypedArray(tempDstBuffer.getMappedRange());
 		return result;
 	}
 
@@ -80,7 +82,7 @@ class SourceModule {
 		this.device = gpu.device;
 		this.kernel = kernel;
 	}
-	getFunction(name) {
+	getFunctionExplicitBindings(name) {
 		const mod = this.device.createShaderModule({ code: this.kernel });
 		const computePipeline = this.device.createComputePipeline({
 			layout: "auto",
@@ -90,13 +92,16 @@ class SourceModule {
 			},
 		});
 		const bindGroupLayout = computePipeline.getBindGroupLayout(0);
-		return ({ inputs, workgroups }) => {
-			assert(inputs !== undefined);
+		return (workgroups, ...bindings) => {
 			assert(workgroups !== undefined);
 
+			const correctBindingsFormat = bindings.map((b) => ({
+				binding: b.binding,
+				resource: { buffer: b.buffer },
+			}));
 			const bindGroup = this.device.createBindGroup({
 				layout: bindGroupLayout,
-				entries: inputs,
+				entries: correctBindingsFormat,
 			});
 			const commandEncoder = this.device.createCommandEncoder();
 			const passEncoder = commandEncoder.beginComputePass();
@@ -107,6 +112,31 @@ class SourceModule {
 
 			this.device.queue.submit([commandEncoder.finish()]);
 		};
+	}
+	/**
+	 * Given the entryName of the kernel program (ie main for 'fn main') return a callable gpu function
+	 * which takes the workgroups and the buffers as arguments.
+	 *
+	 * If explicitBindings is set to true, then must specify binding number for each buffer,
+	 * otherwise just provide the list of buffers and binding number inferred by position
+	 *
+	 * @param {string} name
+	 * @param {boolean?} explicitBindings
+	 * @returns {(workgroups: number[], ...bindings: {binding: number, buffer: GPUBuffer}[] | GPUBuffer[]) => void}
+	 */
+	getFunction(name, explicitBindings = false) {
+		const gpuFunc = this.getFunctionExplicitBindings(name);
+		if (explicitBindings) return gpuFunc;
+		else
+			return (workgroups, ...buffers) => {
+				const inferredBindingsFromBuffers = buffers.map(
+					(buffer, binding) => ({
+						binding,
+						buffer,
+					})
+				);
+				gpuFunc(workgroups, ...inferredBindingsFromBuffers);
+			};
 	}
 }
 
@@ -138,7 +168,7 @@ async function testMemAllocAndCopy() {
 export async function test() {
 	await testMemAllocAndCopy();
 	await testSingleWorkgroup();
-	await testMultipleWorkgroups();
+	await testOtherTypes();
 }
 
 async function testSingleWorkgroup() {
@@ -181,15 +211,13 @@ async function testSingleWorkgroup() {
         }
       }
     `);
-	const dot = mod.getFunction("myDot");
-	dot({
-		inputs: [
-			{ binding: 0, resource: { buffer: gpuA } },
-			{ binding: 1, resource: { buffer: gpuB } },
-			{ binding: 2, resource: { buffer: gpuC } },
-		],
-		workgroups: [1],
-	});
+	const dot = mod.getFunction("myDot", true);
+	dot(
+		[1],
+		{ binding: 0, buffer: gpuA },
+		{ binding: 1, buffer: gpuB },
+		{ binding: 2, buffer: gpuC }
+	);
 
 	// copy back the result and compare
 	await gpu.memcpyDeviceToHost(cpuC, gpuC);
@@ -208,55 +236,52 @@ async function testSingleWorkgroup() {
 	gpu.free(gpuC);
 }
 
-async function testMultipleWorkgroups() {
+async function testOtherTypes() {
 	const gpu = await GPU.init();
 
-	const length = 4 * 256;
-	const cpuA = new Float32Array(length).fill(0).map((_) => Math.random());
-	const cpuB = new Float32Array(length).fill(0).map((_) => Math.random());
-	const cpuC = new Float32Array([0]);
+	const length = 256;
+	const cpuA = new Uint32Array(length).fill(0).map((_, i) => i);
+	const cpuB = new Uint32Array(length).fill(1);
+	const cpuC = new Uint32Array([0]);
+	const cpuN = new Uint32Array([length]);
 
 	const gpuA = gpu.memAlloc(cpuA.byteLength);
 	const gpuB = gpu.memAlloc(cpuB.byteLength);
 	const gpuC = gpu.memAlloc(cpuC.byteLength);
+	const gpuN = gpu.memAlloc(cpuN.byteLength);
 
 	gpu.memcpyHostToDevice(gpuA, cpuA);
 	gpu.memcpyHostToDevice(gpuB, cpuB);
 	gpu.memcpyHostToDevice(gpuC, cpuC);
+	gpu.memcpyHostToDevice(gpuN, cpuN);
 
 	const THREADS_PER_BLOCK = 256;
 	const mod = gpu.SourceModule(`
-      @group(0) @binding(0) var<storage, read> a: array<f32>;
-      @group(0) @binding(1) var<storage, read> b: array<f32>;
-      @group(0) @binding(2) var<storage, read_write> c: f32;
+      @group(0) @binding(0) var<storage, read> a: array<u32>;
+      @group(0) @binding(1) var<storage, read> b: array<u32>;
+      @group(0) @binding(2) var<storage, read_write> c: u32;
+      @group(0) @binding(3) var<storage, read> n: u32;
 
-      var<workgroup> partialSums: array<f32, ${THREADS_PER_BLOCK}>;
+      var<workgroup> partialSums: array<u32, ${THREADS_PER_BLOCK}>;
 
       @compute @workgroup_size(${THREADS_PER_BLOCK})
       fn myDot(@builtin(global_invocation_id) gid : vec3u, @builtin(local_invocation_id) lid : vec3u) {
-        if(gid.x < ${length}) {
+        if(gid.x < n) {
           partialSums[lid.x] = a[gid.x]*b[gid.x];
         }
         workgroupBarrier();
 
         if(lid.x == 0) {
-          var summed: f32 = 0.0;
+          var summed: u32 = 0;
           for(var i: u32 = 0; i < ${THREADS_PER_BLOCK}; i++) {
             summed += partialSums[i];
           }
-          c += summed;
+		  c += summed;
         }
       }
     `);
 	const dot = mod.getFunction("myDot");
-	dot({
-		inputs: [
-			{ binding: 0, resource: { buffer: gpuA } },
-			{ binding: 1, resource: { buffer: gpuB } },
-			{ binding: 2, resource: { buffer: gpuC } },
-		],
-		workgroups: [4],
-	});
+	dot([1], gpuA, gpuB, gpuC, gpuN);
 
 	// copy back the result and compare
 	await gpu.memcpyDeviceToHost(cpuC, gpuC);
@@ -264,12 +289,11 @@ async function testMultipleWorkgroups() {
 		return acc + cpuA[i] * cpuB[i];
 	}, 0);
 
-	console.log(actual.toFixed(0), cpuC[0].toFixed(0));
-	// assert(
-	// 	actual.toFixed(0) === cpuC[0].toFixed(0),
-	// 	"[testMultipleWorkgroups] incorrect dot product"
-	// );
-	// console.log("[testMultipleWorkgroups] PASSED");
+	assert(
+		actual.toFixed(0) === cpuC[0].toFixed(0),
+		"[testOtherTypes] incorrect dot product"
+	);
+	console.log("[testMultipleWorkgroups] PASSED");
 
 	gpu.free(gpuA);
 	gpu.free(gpuB);
@@ -277,5 +301,5 @@ async function testMultipleWorkgroups() {
 }
 
 export async function dev() {
-	await testMultipleWorkgroups();
+	await test();
 }
