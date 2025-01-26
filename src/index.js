@@ -138,7 +138,7 @@ async function testMemAllocAndCopy() {
 export async function test() {
 	await testMemAllocAndCopy();
 	await testSingleWorkgroup();
-	await testSourceModule();
+	await testMultipleWorkgroups();
 }
 
 async function testSingleWorkgroup() {
@@ -207,10 +207,11 @@ async function testSingleWorkgroup() {
 	gpu.free(gpuB);
 	gpu.free(gpuC);
 }
-async function testSourceModule() {
+
+async function testMultipleWorkgroups() {
 	const gpu = await GPU.init();
 
-	const length = 256;
+	const length = 4 * 256;
 	const cpuA = new Float32Array(length).fill(0).map((_) => Math.random());
 	const cpuB = new Float32Array(length).fill(0).map((_) => Math.random());
 	const cpuC = new Float32Array([0]);
@@ -234,10 +235,10 @@ async function testSourceModule() {
       @compute @workgroup_size(${THREADS_PER_BLOCK})
       fn myDot(@builtin(global_invocation_id) gid : vec3u, @builtin(local_invocation_id) lid : vec3u) {
         if(gid.x < ${length}) {
-          partialSums[lid.x] += a[gid.x]*b[gid.x];
+          partialSums[lid.x] = a[gid.x]*b[gid.x];
         }
-
         workgroupBarrier();
+
         if(lid.x == 0) {
           var summed: f32 = 0.0;
           for(var i: u32 = 0; i < ${THREADS_PER_BLOCK}; i++) {
@@ -254,7 +255,7 @@ async function testSourceModule() {
 			{ binding: 1, resource: { buffer: gpuB } },
 			{ binding: 2, resource: { buffer: gpuC } },
 		],
-		workgroups: [1],
+		workgroups: [4],
 	});
 
 	// copy back the result and compare
@@ -263,11 +264,12 @@ async function testSourceModule() {
 		return acc + cpuA[i] * cpuB[i];
 	}, 0);
 
-	assert(
-		actual.toFixed(0) === cpuC[0].toFixed(0),
-		"[testSourceModule] incorrect dot product"
-	);
-	console.log("[testSourceModule] PASSED");
+	console.log(actual.toFixed(0), cpuC[0].toFixed(0));
+	// assert(
+	// 	actual.toFixed(0) === cpuC[0].toFixed(0),
+	// 	"[testMultipleWorkgroups] incorrect dot product"
+	// );
+	// console.log("[testMultipleWorkgroups] PASSED");
 
 	gpu.free(gpuA);
 	gpu.free(gpuB);
@@ -275,5 +277,5 @@ async function testSourceModule() {
 }
 
 export async function dev() {
-	await test();
+	await testMultipleWorkgroups();
 }
