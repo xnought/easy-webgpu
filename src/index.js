@@ -68,14 +68,36 @@ class GPU {
 		const result = new Float32Array(tempDstBuffer.getMappedRange());
 		return result;
 	}
-}
 
-class SourceModule {
-	constructor(gpu, kernel) {
-		this.gpu = gpu;
-		this.kernel = kernel;
+	/**
+	 * @param {{code: string, buffers: {buffer: GPUBuffer, type: "storage" | "read-only-storage" | undefined}[], dispatchWorkgroups: number[], entryPoint?: string}
+	 */
+	execKernel({ code, buffers, dispatchWorkgroups, entryPoint = "main" }) {
+		const mod = this.device.createShaderModule({ code });
+		const bindGroupLayout = this.device.createBindGroupLayout({
+			entries: parseLayout(buffers),
+		});
+		const bindGroup = this.device.createBindGroup({
+			layout: bindGroupLayout,
+			entries: parseEntries(buffers),
+		});
+		const computePipeline = this.device.createComputePipeline({
+			layout: this.device.createPipelineLayout({
+				bindGroupLayouts: [bindGroupLayout],
+			}),
+			compute: {
+				module: mod,
+				entryPoint,
+			},
+		});
+		const commandEncoder = this.device.createCommandEncoder();
+		const passEncoder = commandEncoder.beginComputePass();
+		passEncoder.setPipeline(computePipeline);
+		passEncoder.setBindGroup(0, bindGroup);
+		passEncoder.dispatchWorkgroups(...dispatchWorkgroups);
+		passEncoder.end();
+		this.device.queue.submit([commandEncoder.finish()]);
 	}
-	get_function() {}
 }
 
 async function testMemAllocAndCopy() {
@@ -100,6 +122,22 @@ async function testMemAllocAndCopy() {
 	);
 
 	gpu.free(cGPU);
+}
+
+function parseLayout(buffers) {
+	return buffers.map((d, i) => {
+		return {
+			binding: i,
+			visibility: GPUShaderStage.COMPUTE,
+			buffer: { type: d.type ?? "read-only-storage" },
+		};
+	});
+}
+
+function parseEntries(buffers) {
+	return buffers.map((d, i) => {
+		return { binding: i, resource: { buffer: d.buffer } };
+	});
 }
 
 export async function test() {
@@ -128,8 +166,7 @@ export async function dev() {
 
 	// dot
 	const THREADS_PER_BLOCK = 5;
-	const mod = gpu.device.createShaderModule({
-		code: `
+	const code = `
       @group(0) @binding(0) var<storage, read> a: array<f32>;
       @group(0) @binding(1) var<storage, read> b: array<f32>;
       @group(0) @binding(2) var<storage, read_write> c: f32;
@@ -149,53 +186,16 @@ export async function dev() {
           c = summed;
         }
       }
-    `,
-	});
-	const bindGroupLayout = gpu.device.createBindGroupLayout({
-		entries: [
-			{
-				binding: 0,
-				visibility: GPUShaderStage.COMPUTE,
-				buffer: { type: "read-only-storage" },
-			},
-			{
-				binding: 1,
-				visibility: GPUShaderStage.COMPUTE,
-				buffer: { type: "read-only-storage" },
-			},
-			{
-				binding: 2,
-				visibility: GPUShaderStage.COMPUTE,
-				buffer: { type: "storage" },
-			},
+    `;
+	gpu.execKernel({
+		code,
+		buffers: [
+			{ buffer: gpuA, type: "read-only-storage" },
+			{ buffer: gpuB, type: "read-only-storage" },
+			{ buffer: gpuC, type: "storage" },
 		],
+		dispatchWorkgroups: [1],
 	});
-	const bindGroup = gpu.device.createBindGroup({
-		layout: bindGroupLayout,
-		entries: [
-			{ binding: 0, resource: { buffer: gpuA } },
-			{ binding: 1, resource: { buffer: gpuB } },
-			{ binding: 2, resource: { buffer: gpuC } },
-		],
-	});
-	const computePipeline = gpu.device.createComputePipeline({
-		layout: gpu.device.createPipelineLayout({
-			bindGroupLayouts: [bindGroupLayout],
-		}),
-		compute: {
-			module: mod,
-			entryPoint: "main",
-		},
-	});
-	console.log(computePipeline);
-
-	const commandEncoder = gpu.device.createCommandEncoder();
-	const passEncoder = commandEncoder.beginComputePass();
-	passEncoder.setPipeline(computePipeline);
-	passEncoder.setBindGroup(0, bindGroup);
-	passEncoder.dispatchWorkgroups(1);
-	passEncoder.end();
-	gpu.device.queue.submit([commandEncoder.finish()]);
 
 	// copy back the result and compare
 	await gpu.memcpyDeviceToHost(cpuC, gpuC);
