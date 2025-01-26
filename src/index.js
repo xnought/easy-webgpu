@@ -95,13 +95,9 @@ class SourceModule {
 		return (workgroups, ...bindings) => {
 			assert(workgroups !== undefined);
 
-			const correctBindingsFormat = bindings.map((b) => ({
-				binding: b.binding,
-				resource: { buffer: b.buffer },
-			}));
 			const bindGroup = this.device.createBindGroup({
 				layout: bindGroupLayout,
-				entries: correctBindingsFormat,
+				entries: bindings,
 			});
 			const commandEncoder = this.device.createCommandEncoder();
 			const passEncoder = commandEncoder.beginComputePass();
@@ -113,6 +109,18 @@ class SourceModule {
 			this.device.queue.submit([commandEncoder.finish()]);
 		};
 	}
+	getFunctionOnlyBuffers(name) {
+		const gpuFunc = this.getFunctionExplicitBindings(name);
+		return (workgroups, ...buffers) => {
+			const inferredBindingsFromBuffers = buffers.map(
+				(buffer, binding) => ({
+					binding,
+					resource: { buffer },
+				})
+			);
+			gpuFunc(workgroups, ...inferredBindingsFromBuffers);
+		};
+	}
 	/**
 	 * Given the entryName of the kernel program (ie main for 'fn main') return a callable gpu function
 	 * which takes the workgroups and the buffers as arguments.
@@ -122,21 +130,12 @@ class SourceModule {
 	 *
 	 * @param {string} name
 	 * @param {boolean?} explicitBindings
-	 * @returns {(workgroups: number[], ...bindings: {binding: number, buffer: GPUBuffer}[] | GPUBuffer[]) => void}
+	 * @returns {(workgroups: number[], ...bindings: {binding: number, resource: {buffer: GPUBuffer}}[] | GPUBuffer[]) => void}
 	 */
 	getFunction(name, explicitBindings = false) {
-		const gpuFunc = this.getFunctionExplicitBindings(name);
-		if (explicitBindings) return gpuFunc;
-		else
-			return (workgroups, ...buffers) => {
-				const inferredBindingsFromBuffers = buffers.map(
-					(buffer, binding) => ({
-						binding,
-						buffer,
-					})
-				);
-				gpuFunc(workgroups, ...inferredBindingsFromBuffers);
-			};
+		return explicitBindings
+			? this.getFunctionExplicitBindings(name)
+			: this.getFunctionOnlyBuffers(name);
 	}
 }
 
@@ -214,9 +213,9 @@ async function testSingleWorkgroup() {
 	const dot = mod.getFunction("myDot", true);
 	dot(
 		[1],
-		{ binding: 0, buffer: gpuA },
-		{ binding: 1, buffer: gpuB },
-		{ binding: 2, buffer: gpuC }
+		{ binding: 0, resource: { buffer: gpuA } },
+		{ binding: 1, resource: { buffer: gpuB } },
+		{ binding: 2, resource: { buffer: gpuC } }
 	);
 
 	// copy back the result and compare
