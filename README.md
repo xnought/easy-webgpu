@@ -1,6 +1,6 @@
 # WebGPU Tensor
 
-1. A Tensor (ndarray) API with common operations
+1. A Tensor (ndarray) API with common operations accelerated by WebGPU
 2. A low-level PyCuda like API to easily transfer data from CPU to GPU, execute WebGPU code, and transfer back from GPU to CPU.
 
 **Roadmap**
