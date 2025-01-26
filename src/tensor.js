@@ -56,7 +56,7 @@ export class Tensor {
 
 export async function dev() {
 	const gpu = await GPU.init();
-	// const a = new Tensor(gpu, new Float32Array([1, 2, 3, 4]));
+	// const a = new Tensor(gpu, new Float32Array([1, 2, 3, 4]), [4, 1]);
 	const a = Tensor.ones(gpu, [4, 1], Float32Array);
 	await a.print();
 	a.free();
