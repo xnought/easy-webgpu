@@ -7,7 +7,7 @@
 
 - [x] Copy the basic API structure of PyCuda
 - [x] Memcpy and MemAlloc for other data types (uint and so on).
-- [ ] Tensor constructor (shape, strides, ...)
+- [ ] Tensor constructor (tensor, zeros, ones)
 - [ ] Tensor Reshape Ops (transpose, reshape, expand, ...)
 - [ ] Tensor Binary Ops (add, sub, mult, div, ...)
 - [ ] Tensor Unary Ops (ReLU, Sigmoid, ...)
