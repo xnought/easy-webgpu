@@ -5,6 +5,26 @@ main();
 async function main() {
 	await test();
 	await example();
+	// await memoryStressTest();
+}
+
+async function memoryStressTest() {
+	const gpu = await GPU.init();
+
+	console.log("Memory Stress Test Starting");
+
+	const bytes = 268435456;
+	let maxIters = 10000;
+	let i = 0;
+	let buffers = [];
+	while (i < maxIters) {
+		const b = gpu.memAlloc(bytes);
+		buffers.push(b);
+		gpu.free(b);
+		i++;
+	}
+
+	console.log("Memory Stress Test Ended");
 }
 
 async function example() {
