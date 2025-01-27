@@ -33,12 +33,12 @@ const cpuBuffer = new Float32Array([1,2,3,4]);
 const gpuBuffer = gpu.memAlloc(cpuBuffer.byteLength); 
 gpu.memcpyHostToDevice(gpuBuffer, cpuBuffer);
 
-await gpu.printGPUBuffer(gpuLength); // > [1,2,3,4]
+await gpu.printGPUBuffer(gpuBuffer); // > [1,2,3,4]
 ```
 
 ### Copy GPU data back to CPU 
 
-(Uses variables in last example)
+(Uses variables in [last section](#copy-cpu-data-into-gpu))
 
 ```js
 import { GPU } from "webgpu-compute";
