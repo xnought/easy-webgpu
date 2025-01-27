@@ -1,2 +1,2 @@
-import { dev } from "./src";
-dev().then((d) => {});
+import { example } from "./webgpu-compute";
+example();
