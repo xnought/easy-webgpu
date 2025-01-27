@@ -2,7 +2,20 @@
 
 A PyCuda like API to easily transfer data from CPU to GPU, execute WebGPU code, and transfer back from GPU to CPU.
 
-All code in [`webgpu-compute/index.js`](webgpu-compute/index.js) with no dependencies other than being run in a WebGPU compatible browser (ie chrome).
+
+## Install
+
+No dependencies and the code is simple enough for you to edit if you need to.
+
+All code in [`webgpu-compute/index.js`](webgpu-compute/index.js).
+
+You can manually download the file or just do
+
+```bash
+wget https://raw.githubusercontent.com/xnought/webgpu-compute/refs/heads/main/webgpu-compute/index.js -P webgpu-compute/index.js
+```
+
+in your JS project.
 
 ## Usage
 
@@ -21,6 +34,16 @@ import { GPU } from "webgpu-compute";
 const gpu = await GPU.init(); 
 
 const gpuBuffer = gpu.memAlloc(16); // allocated 16 bytes on the GPU
+```
+
+### Free GPU Buffers
+
+```js
+import { GPU } from "webgpu-compute";
+const gpu = await GPU.init(); 
+
+const gpuBuffer = gpu.memAlloc(16);
+gpu.free(gpuBuffer); // freed on GPU!
 ```
 
 ### Copy CPU data into GPU
