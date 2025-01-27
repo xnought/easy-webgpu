@@ -1,6 +1,7 @@
 {
-	"name": "webgpu-tensor",
+	"name": "webgpu-compute",
 	"private": true,
+	"main": "webgpu-compute/index.js",
 	"version": "0.0.0",
 	"type": "module",
 	"scripts": {

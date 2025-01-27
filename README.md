@@ -1,4 +1,4 @@
-# Compute WebGPU 
+# webgpu-compute library 
 
 A PyCuda like API to easily transfer data from CPU to GPU, execute WebGPU code, and transfer back from GPU to CPU.
 
