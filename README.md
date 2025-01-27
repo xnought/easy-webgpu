@@ -7,12 +7,12 @@ A PyCuda like API to easily transfer data from CPU to GPU, execute WebGPU code, 
 
 No dependencies and the code is simple enough for you to edit if you need to.
 
-All code in [`webgpu-compute/index.js`](webgpu-compute/index.js).
+All code in [`webgpu-compute.js`](webgpu-compute.js).
 
 You can manually download the file or just do
 
 ```bash
-wget https://raw.githubusercontent.com/xnought/webgpu-compute/refs/heads/main/webgpu-compute/index.js -P webgpu-compute/index.js
+wget https://raw.githubusercontent.com/xnought/webgpu-compute/refs/heads/main/webgpu-compute.js 
 ```
 
 in your JS project.
@@ -117,8 +117,7 @@ console.log(cpuData); // > [1, 4, 9, 16]
 ## Dev
 
 ```bash
+cd example
 pnpm install
 pnpm dev
 ```
-
-the `dev.js` is imported via the website `index.html`, but the actual package is in `src/`. The dev mode is just for when working on the package.
