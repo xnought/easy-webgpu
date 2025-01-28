@@ -3,7 +3,7 @@ import { GPU, assert } from "../webgpu-compute";
 main();
 
 async function main() {
-	await test();
+	// await test();
 	await example();
 	// await memoryStressTest();
 }
@@ -31,14 +31,19 @@ async function example() {
 	const gpu = await GPU.init();
 
 	// cpu data
-	const cpuData = new Float32Array([1, 2, 3, 4]); // data
+	const cpuData = new Float32Array(1e6).fill(3); // data
 	const cpuLength = new Uint32Array([cpuData.length]); // length of data
 
 	// move cpu data to gpu
-	const gpuData = gpu.memAlloc(cpuData.byteLength);
-	const gpuLength = gpu.memAlloc(cpuLength.byteLength);
-	gpu.memcpyHostToDevice(gpuData, cpuData);
-	gpu.memcpyHostToDevice(gpuLength, cpuLength);
+	console.time("ALLOCATION");
+	const gpuData = await gpu.memAlloc(cpuData.byteLength);
+	const gpuLength = await gpu.memAlloc(cpuLength.byteLength);
+	console.timeEnd("ALLOCATION");
+
+	console.time("HOST TO DEVICE");
+	await gpu.memcpyHostToDevice(gpuData, cpuData);
+	await gpu.memcpyHostToDevice(gpuLength, cpuLength);
+	console.timeEnd("HOST TO DEVICE");
 
 	// initialize webgpu kernel to square all elements in data
 	const module = gpu.SourceModule(`
@@ -56,11 +61,15 @@ async function example() {
 	// execute kernel
 	const square = module.getFunction("square");
 	const workgroups = [1];
-	square(workgroups, gpuData, gpuLength);
+	console.time("SQUARE");
+	await square(workgroups, gpuData, gpuLength);
+	console.timeEnd("SQUARE");
 
 	// bring result back to cpu
+	console.time("PRINT");
 	await gpu.memcpyDeviceToHost(cpuData, gpuData);
 	console.log(cpuData); // > [1, 4, 9, 16]
+	console.timeEnd("PRINT");
 }
 
 async function testMemAllocAndCopy() {

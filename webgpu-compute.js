@@ -38,8 +38,9 @@ export class GPU {
 		});
 		return buffer;
 	}
-	memcpyHostToDevice(gpuBuffer, cpuBuffer) {
+	async memcpyHostToDevice(gpuBuffer, cpuBuffer) {
 		this.device.queue.writeBuffer(gpuBuffer, 0, cpuBuffer, 0);
+		await this.device.queue.onSubmittedWorkDone();
 	}
 	async memcpyDeviceToHost(hostBuffer, deviceBuffer) {
 		hostBuffer.set(
@@ -72,7 +73,9 @@ export class GPU {
 			gpuSrcBuffer.size
 		);
 		this.device.queue.submit([copyEncoder.finish()]);
+		await this.device.queue.onSubmittedWorkDone();
 		await tempDstBuffer.mapAsync(GPUMapMode.READ);
+
 		const result = new TypedArray(tempDstBuffer.getMappedRange());
 		return result;
 	}
@@ -98,7 +101,7 @@ export class SourceModule {
 			},
 		});
 		const bindGroupLayout = computePipeline.getBindGroupLayout(0);
-		return (workgroups, ...bindings) => {
+		return async (workgroups, ...bindings) => {
 			assert(workgroups !== undefined);
 
 			const bindGroup = this.device.createBindGroup({
@@ -113,18 +116,19 @@ export class SourceModule {
 			passEncoder.end();
 
 			this.device.queue.submit([commandEncoder.finish()]);
+			await this.device.queue.onSubmittedWorkDone();
 		};
 	}
 	getFunctionOnlyBuffers(name) {
 		const gpuFunc = this.getFunctionExplicitBindings(name);
-		return (workgroups, ...buffers) => {
+		return async (workgroups, ...buffers) => {
 			const inferredBindingsFromBuffers = buffers.map(
 				(buffer, binding) => ({
 					binding,
 					resource: { buffer },
 				})
 			);
-			gpuFunc(workgroups, ...inferredBindingsFromBuffers);
+			await gpuFunc(workgroups, ...inferredBindingsFromBuffers);
 		};
 	}
 	/**
@@ -136,7 +140,7 @@ export class SourceModule {
 	 *
 	 * @param {string} name
 	 * @param {boolean?} explicitBindings
-	 * @returns {(workgroups: number[], ...bindings: {binding: number, resource: {buffer: GPUBuffer}}[] | GPUBuffer[]) => void}
+	 * @returns {async(workgroups: number[], ...bindings: {binding: number, resource: {buffer: GPUBuffer}}[] | GPUBuffer[]) => void}
 	 */
 	getFunction(name, explicitBindings = false) {
 		return explicitBindings
