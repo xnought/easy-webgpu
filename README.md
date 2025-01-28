@@ -121,7 +121,7 @@ async function example() {
 	// bring result back to cpu
 	console.time("PRINT");
 	await gpu.memcpyDeviceToHost(cpuData, gpuData);
-	console.log(cpuData); // > [1, 4, 9, 16]
+	console.log(cpuData); 
 	console.timeEnd("PRINT");
 }
 ```
