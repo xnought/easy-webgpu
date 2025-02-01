@@ -116,6 +116,7 @@ async function example() {
 	const workgroups = [1];
 	console.time("SQUARE");
 	await square(workgroups, gpuData, gpuLength);
+	await gpu.deviceSynchronize(); // to get correct timing, need to function to execute now
 	console.timeEnd("SQUARE");
 
 	// bring result back to cpu
