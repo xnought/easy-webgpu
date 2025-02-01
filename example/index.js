@@ -63,6 +63,7 @@ async function example() {
 	const workgroups = [1];
 	console.time("SQUARE");
 	await square(workgroups, gpuData, gpuLength);
+	await gpu.deviceSynchronize();
 	console.timeEnd("SQUARE");
 
 	// bring result back to cpu
@@ -88,10 +89,7 @@ async function testMemAllocAndCopy() {
 			break;
 		}
 	}
-	assert(
-		same,
-		"[testMemAllocAndCopy] Data not copied to or from GPU correctly."
-	);
+	assert(same, "[testMemAllocAndCopy] Data not copied to or from GPU correctly.");
 	console.log("[testMemAllocAndCopy] PASSED");
 
 	gpu.free(cGPU);
@@ -138,12 +136,7 @@ async function testSingleWorkgroup() {
       }
     `);
 	const dot = mod.getFunction("myDot", true);
-	dot(
-		[1],
-		{ binding: 0, resource: { buffer: gpuA } },
-		{ binding: 1, resource: { buffer: gpuB } },
-		{ binding: 2, resource: { buffer: gpuC } }
-	);
+	dot([1], { binding: 0, resource: { buffer: gpuA } }, { binding: 1, resource: { buffer: gpuB } }, { binding: 2, resource: { buffer: gpuC } });
 
 	// copy back the result and compare
 	await gpu.memcpyDeviceToHost(cpuC, gpuC);
@@ -151,10 +144,7 @@ async function testSingleWorkgroup() {
 		return acc + cpuA[i] * cpuB[i];
 	}, 0);
 
-	assert(
-		actual.toFixed(0) === cpuC[0].toFixed(0),
-		"[testSingleWorkgroup] incorrect dot product"
-	);
+	assert(actual.toFixed(0) === cpuC[0].toFixed(0), "[testSingleWorkgroup] incorrect dot product");
 	console.log("[testSingleWorkgroup] PASSED");
 
 	gpu.free(gpuA);
@@ -216,10 +206,7 @@ async function testOtherTypes() {
 		return acc + cpuA[i] * cpuB[i];
 	}, 0);
 
-	assert(
-		actual.toFixed(0) === cpuC[0].toFixed(0),
-		"[testOtherTypes] incorrect dot product"
-	);
+	assert(actual.toFixed(0) === cpuC[0].toFixed(0), "[testOtherTypes] incorrect dot product");
 	console.log("[testMultipleWorkgroups] PASSED");
 
 	gpu.free(gpuA);
