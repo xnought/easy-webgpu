@@ -27,9 +27,9 @@ export class GPU {
 	/**
 	 * @param {number} bytes
 	 * @param {GPUBufferUsage} usage
-	 * @returns {Promise<GPUBuffer>}
+	 * @returns {GPUBuffer}
 	 */
-	async memAlloc(bytes, usage = GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST | GPUBufferUsage.COPY_SRC) {
+	memAlloc(bytes, usage = GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST | GPUBufferUsage.COPY_SRC) {
 		assert(bytes > 0);
 		const buffer = this.device.createBuffer({
 			size: bytes,
@@ -37,7 +37,7 @@ export class GPU {
 		});
 		return buffer;
 	}
-	async memcpyHostToDevice(gpuBuffer, cpuBuffer) {
+	memcpyHostToDevice(gpuBuffer, cpuBuffer) {
 		this.device.queue.writeBuffer(gpuBuffer, 0, cpuBuffer, 0);
 	}
 	async memcpyDeviceToHost(hostBuffer, deviceBuffer) {
@@ -87,7 +87,7 @@ export class SourceModule {
 			},
 		});
 		const bindGroupLayout = computePipeline.getBindGroupLayout(0);
-		return async (workgroups, ...bindings) => {
+		return (workgroups, ...bindings) => {
 			assert(workgroups !== undefined);
 
 			const bindGroup = this.device.createBindGroup({
@@ -106,12 +106,12 @@ export class SourceModule {
 	}
 	getFunctionOnlyBuffers(name) {
 		const gpuFunc = this.getFunctionExplicitBindings(name);
-		return async (workgroups, ...buffers) => {
+		return (workgroups, ...buffers) => {
 			const inferredBindingsFromBuffers = buffers.map((buffer, binding) => ({
 				binding,
 				resource: { buffer },
 			}));
-			await gpuFunc(workgroups, ...inferredBindingsFromBuffers);
+			gpuFunc(workgroups, ...inferredBindingsFromBuffers);
 		};
 	}
 	/**
@@ -123,7 +123,7 @@ export class SourceModule {
 	 *
 	 * @param {string} name
 	 * @param {boolean?} explicitBindings
-	 * @returns {async(workgroups: number[], ...bindings: {binding: number, resource: {buffer: GPUBuffer}}[] | GPUBuffer[]) => void}
+	 * @returns {(workgroups: number[], ...bindings: {binding: number, resource: {buffer: GPUBuffer}}[] | GPUBuffer[]) => void}
 	 */
 	getFunction(name, explicitBindings = false) {
 		return explicitBindings ? this.getFunctionExplicitBindings(name) : this.getFunctionOnlyBuffers(name);

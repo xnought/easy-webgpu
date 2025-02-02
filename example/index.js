@@ -36,13 +36,15 @@ async function example() {
 
 	// move cpu data to gpu
 	console.time("ALLOCATION");
-	const gpuData = await gpu.memAlloc(cpuData.byteLength);
-	const gpuLength = await gpu.memAlloc(cpuLength.byteLength);
+	const gpuData = gpu.memAlloc(cpuData.byteLength);
+	const gpuLength = gpu.memAlloc(cpuLength.byteLength);
+	await gpu.deviceSynchronize();
 	console.timeEnd("ALLOCATION");
 
 	console.time("HOST TO DEVICE");
-	await gpu.memcpyHostToDevice(gpuData, cpuData);
-	await gpu.memcpyHostToDevice(gpuLength, cpuLength);
+	gpu.memcpyHostToDevice(gpuData, cpuData);
+	gpu.memcpyHostToDevice(gpuLength, cpuLength);
+	await gpu.deviceSynchronize();
 	console.timeEnd("HOST TO DEVICE");
 
 	// initialize webgpu kernel to square all elements in data
