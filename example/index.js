@@ -28,7 +28,9 @@ async function memoryStressTest() {
 }
 
 async function example() {
-	const gpu = await GPU.init();
+	const adapter = await navigator.gpu.requestAdapter();
+	const device = await adapter.requestDevice();
+	const gpu = new GPU(device);
 
 	// cpu data
 	const cpuData = new Float32Array(1e6).fill(3); // data
@@ -64,7 +66,7 @@ async function example() {
 	const square = module.getFunction("square");
 	const workgroups = [1];
 	console.time("SQUARE");
-	await square(workgroups, gpuData, gpuLength);
+	square(workgroups, gpuData, gpuLength);
 	await gpu.deviceSynchronize();
 	console.timeEnd("SQUARE");
 
