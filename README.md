@@ -21,9 +21,22 @@ in your JS project.
 
 ### Initialize GPU
 
+Either do the shorthand:
+
 ```js
 import { GPU } from "webgpu-compute";
 const gpu = await GPU.init(); 
+gpu.printDeviceInfo(); // > {architecture : "rdna-1" description : "" device : "" vendor : "amd"}
+```
+
+or if you prefer to request the device yourself
+
+```js
+import { GPU } from "webgpu-compute";
+
+const adapter = await navigator.gpu.requestAdapter();
+const device = await adapter.requestDevice();
+const gpu = new GPU(device);
 gpu.printDeviceInfo(); // > {architecture : "rdna-1" description : "" device : "" vendor : "amd"}
 ```
 
@@ -33,7 +46,7 @@ gpu.printDeviceInfo(); // > {architecture : "rdna-1" description : "" device : "
 import { GPU } from "webgpu-compute";
 const gpu = await GPU.init(); 
 
-const gpuBuffer = await gpu.memAlloc(16); // allocated 16 bytes on the GPU
+const gpuBuffer = gpu.memAlloc(16); // allocated 16 bytes on the GPU
 ```
 
 ### Free GPU Buffers
@@ -42,7 +55,7 @@ const gpuBuffer = await gpu.memAlloc(16); // allocated 16 bytes on the GPU
 import { GPU } from "webgpu-compute";
 const gpu = await GPU.init(); 
 
-const gpuBuffer = await gpu.memAlloc(16);
+const gpuBuffer = gpu.memAlloc(16);
 gpu.free(gpuBuffer); // freed on GPU!
 ```
 
@@ -53,8 +66,8 @@ import { GPU } from "webgpu-compute";
 const gpu = await GPU.init(); 
 
 const cpuBuffer = new Float32Array([1,2,3,4]);
-const gpuBuffer = await gpu.memAlloc(cpuBuffer.byteLength); 
-await gpu.memcpyHostToDevice(gpuBuffer, cpuBuffer);
+const gpuBuffer = gpu.memAlloc(cpuBuffer.byteLength); 
+gpu.memcpyHostToDevice(gpuBuffer, cpuBuffer);
 
 await gpu.printGPUBuffer(gpuBuffer); // > [1,2,3,4]
 ```
@@ -78,53 +91,41 @@ console.log(otherCpuBuffer); // > [1,2,3,4]
 This [example](./example/index.js) squares a million 3s `[3,3,3, ..., 3]` in place with the final result being a million 9s.
 
 ```js
-example();
+const adapter = await navigator.gpu.requestAdapter();
+const device = await adapter.requestDevice();
+const gpu = new GPU(device);
 
-async function example() {
-	const gpu = await GPU.init();
+// cpu data
+const cpuData = new Float32Array(1e6).fill(3); // data
+const cpuLength = new Uint32Array([cpuData.length]); // length of data
 
-	// cpu data
-	const cpuData = new Float32Array(1e6).fill(3); // data
-	const cpuLength = new Uint32Array([cpuData.length]); // length of data
+// move cpu data to gpu
+const gpuData = gpu.memAlloc(cpuData.byteLength);
+const gpuLength = gpu.memAlloc(cpuLength.byteLength);
+await gpu.deviceSynchronize();
+gpu.memcpyHostToDevice(gpuData, cpuData);
+gpu.memcpyHostToDevice(gpuLength, cpuLength);
 
-	// move cpu data to gpu
-	console.time("ALLOCATION");
-	const gpuData = await gpu.memAlloc(cpuData.byteLength);
-	const gpuLength = await gpu.memAlloc(cpuLength.byteLength);
-	console.timeEnd("ALLOCATION");
+// initialize webgpu kernel to square all elements in data
+const module = gpu.SourceModule(`
+	@group(0) @binding(0) var<storage, read_write> data: array<f32>;
+	@group(0) @binding(1) var<storage, read> length: u32;
 
-	console.time("HOST TO DEVICE");
-	await gpu.memcpyHostToDevice(gpuData, cpuData);
-	await gpu.memcpyHostToDevice(gpuLength, cpuLength);
-	console.timeEnd("HOST TO DEVICE");
-
-	// initialize webgpu kernel to square all elements in data
-	const module = gpu.SourceModule(`
-		@group(0) @binding(0) var<storage, read_write> data: array<f32>;
-		@group(0) @binding(1) var<storage, read> length: u32;
-
-		@compute @workgroup_size(256)
-		fn square(@builtin(global_invocation_id) gid : vec3u) {
-			if(gid.x < length) {
-				data[gid.x] = data[gid.x]*data[gid.x];
-			}
+	@compute @workgroup_size(256)
+	fn square(@builtin(global_invocation_id) gid : vec3u) {
+		if(gid.x < length) {
+			data[gid.x] = data[gid.x]*data[gid.x];
 		}
-	`);
+	}
+`);
 
-	// execute kernel
-	const square = module.getFunction("square");
-	const workgroups = [1];
-	console.time("SQUARE");
-	await square(workgroups, gpuData, gpuLength);
-	await gpu.deviceSynchronize(); // to get correct timing, need to function to execute now
-	console.timeEnd("SQUARE");
+// execute kernel
+const square = module.getFunction("square");
+const workgroups = [1];
+square(workgroups, gpuData, gpuLength);
 
-	// bring result back to cpu
-	console.time("PRINT");
-	await gpu.memcpyDeviceToHost(cpuData, gpuData);
-	console.log(cpuData); 
-	console.timeEnd("PRINT");
-}
+await gpu.memcpyDeviceToHost(cpuData, gpuData);
+console.log(cpuData);
 ```
 
 `Console Out ->`
